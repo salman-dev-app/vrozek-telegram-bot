@@ -1,27 +1,46 @@
 {
-  "_note": "VROZEK catalog — single source of products. Edit this file and redeploy. Fields per product: name, category, keywords (for matching), description (short), url (EXACT product page on your website). The bot ONLY ever shares these urls — no buying inside the bot.",
+  "_note": "Edit this file to add/change products, then redeploy. 'url' MUST be your real product page on the website. The bot only shares these links — no buying in the bot.",
   "website": "https://vrozek.xyz",
   "products": [
     {
       "name": "E-Commerce Starter Template",
       "category": "Templates",
-      "keywords": ["ecommerce", "shop", "woocommerce", "store", "landing", "template"],
-      "description": "Ready-to-use storefront template for online shops.",
-      "url": "https://vrozek.xyz/templates/ecommerce-starter"
+      "keywords": [
+        "ecommerce",
+        "shop",
+        "woocommerce",
+        "store",
+        "landing",
+        "template"
+      ],
+      "description": "Ready-to-use storefront template.",
+      "url": "https://vrozek.xyz/REPLACE-WITH-REAL-PRODUCT-LINK-1"
     },
     {
       "name": "Portfolio Template",
       "category": "Templates",
-      "keywords": ["portfolio", "personal", "resume", "cv", "template"],
-      "description": "Clean personal portfolio and resume template.",
-      "url": "https://vrozek.xyz/templates/portfolio"
+      "keywords": [
+        "portfolio",
+        "personal",
+        "resume",
+        "cv",
+        "template"
+      ],
+      "description": "Clean personal portfolio template.",
+      "url": "https://vrozek.xyz/REPLACE-WITH-REAL-PRODUCT-LINK-2"
     },
     {
       "name": "Business Website Template",
       "category": "Templates",
-      "keywords": ["business", "company", "corporate", "website", "template"],
-      "description": "Professional business website template.",
-      "url": "https://vrozek.xyz/templates/business"
+      "keywords": [
+        "business",
+        "company",
+        "corporate",
+        "website",
+        "template"
+      ],
+      "description": "Professional business site template.",
+      "url": "https://vrozek.xyz/REPLACE-WITH-REAL-PRODUCT-LINK-3"
     }
   ]
 }
