@@ -14,22 +14,18 @@ export interface MenuRow {
   url?: string;
 }
 
-export function mainMenuRows(isAdmin: boolean): MenuRow[][] {
+export function mainMenuRows(isAdmin: boolean, websiteUrl = 'https://vrozek.xyz'): MenuRow[][] {
   const rows: MenuRow[][] = [
     [
       { text: '🤖 AI Assistant', callback_data: 'cb_ai' },
-      { text: '🛍️ Shop', callback_data: 'cb_shop' },
-    ],
-    [
       { text: '📦 Products', callback_data: 'cb_products' },
-      { text: '🛒 Cart', callback_data: 'cb_cart' },
     ],
     [
       { text: '👥 Groups', callback_data: 'cb_groups' },
       { text: 'ℹ️ About', callback_data: 'cb_about' },
     ],
     [
-      { text: '🌐 Website', url: 'https://vrozek.xyz' },
+      { text: '🌐 Website', url: websiteUrl },
       { text: '❓ Help', callback_data: 'cb_help' },
     ],
   ];

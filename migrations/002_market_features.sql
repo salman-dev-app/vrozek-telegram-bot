@@ -25,21 +25,3 @@ CREATE TABLE IF NOT EXISTS captcha_state (
   PRIMARY KEY (chat_id, user_id)
 );
 
-CREATE TABLE IF NOT EXISTS cart (
-  user_id INTEGER NOT NULL,
-  product_id INTEGER NOT NULL,
-  qty INTEGER DEFAULT 1,
-  PRIMARY KEY (user_id, product_id)
-);
-
-CREATE TABLE IF NOT EXISTS orders (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER DEFAULT 0,
-  user_name TEXT DEFAULT '',
-  items_json TEXT DEFAULT '',
-  total TEXT DEFAULT '',
-  status TEXT DEFAULT 'new',
-  created_at TEXT DEFAULT (datetime('now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at);

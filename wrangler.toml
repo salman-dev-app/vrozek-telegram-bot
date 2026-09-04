@@ -17,6 +17,7 @@ database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
 # must be set with:  npx wrangler secret put <NAME>
 [vars]
 # GEMINI_MODEL = "gemini-3.5-flash"
+# WEBSITE_URL = "https://vrozek.xyz"   # your store — the bot deep-links products here (or set in Dashboard → Settings → website_url)
 
 # Daily housekeeping at 03:00 UTC (prunes old logs) — optional; remove to disable
 [triggers]

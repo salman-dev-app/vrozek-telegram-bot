@@ -1,6 +1,6 @@
 /**
  * VROZEK AI — message router.
- * Private chat: access control + AI assistant (+ optional personal automation proxy mode) + shop cart.
+ * Private chat: access control + AI assistant (+ optional personal automation proxy mode).
  * Groups: authorized-only, welcome/goodbye, CAPTCHA verification, moderation (persistent),
  * admin moderation commands (/warn /mute /kick /ban /unmute /unban), /report, strict no-spam AI.
  */
@@ -375,7 +375,7 @@ export async function routeMessage(tg: TgClient, env: Env, msg: TgMessage): Prom
   if (!shouldRespondInGroup(msg, ident)) return;
   if (!allowedToReply(chat.id, true)) return;
 
-  const products = /product|buy|price|কিন|দাম|order|cart/i.test(text) ? await findProducts(env, text, 3) : [];
+  const products = /product|buy|price|কিন|দাম|order/i.test(text) ? await findProducts(env, text, 3) : [];
   if (products.length) {
     const lines = products.map((p, i) => {
       let l = `${i + 1}. <b>${esc(p.name)}</b>`;

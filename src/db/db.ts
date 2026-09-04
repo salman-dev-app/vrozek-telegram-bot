@@ -12,6 +12,8 @@ export interface Env {
   DASHBOARD_USERNAME?: string;
   DASHBOARD_PASSWORD?: string;
   WEBHOOK_SECRET?: string;
+  WEBSITE_URL?: string;
+  ORDER_WEBHOOK_SECRET?: string;
 }
 
 export interface SettingRow {
