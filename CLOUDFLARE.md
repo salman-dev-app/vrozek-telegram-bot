@@ -69,7 +69,6 @@ npx wrangler secret put GEMINI_API_KEY          # can also be set later in Dashb
 npx wrangler secret put DASHBOARD_USERNAME      # admin login
 npx wrangler secret put DASHBOARD_PASSWORD      # strong admin password
 npx wrangler secret put WEBHOOK_SECRET          # random string → protects your webhook
-npx wrangler secret put ORDER_WEBHOOK_SECRET    # signs your store's order webhook (POST /webhook/order)
 npx wrangler secret put ADMIN_IDS               # e.g. 111111111,222222222 → Super Admins
 ```
 

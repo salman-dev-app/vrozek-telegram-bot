@@ -144,19 +144,11 @@ CREATE TABLE IF NOT EXISTS captcha_state (
   PRIMARY KEY (chat_id, user_id)
 );
 
--- Website webhook order notifications (from your store)
-CREATE TABLE IF NOT EXISTS site_orders (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  order_id TEXT DEFAULT '',
-  customer TEXT DEFAULT '',
-  payload TEXT DEFAULT '',
-  source TEXT DEFAULT 'website',
-  created_at TEXT DEFAULT (datetime('now'))
-);
+-- (commerce tables intentionally omitted: products live in catalog/products.json)
 
 CREATE INDEX IF NOT EXISTS idx_products_active ON products(active);
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
 CREATE INDEX IF NOT EXISTS idx_knowledge_cat ON knowledge(category);
 CREATE INDEX IF NOT EXISTS idx_modlogs_created ON moderation_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_logs_created ON logs(created_at);
-CREATE INDEX IF NOT EXISTS idx_site_orders_created ON site_orders(created_at);
+

@@ -9,13 +9,14 @@ import type { TgClient } from '../lib/telegram';
 const PUBLIC_COMMANDS = [
   { command: 'start', description: 'Start the assistant' },
   { command: 'help', description: 'Help & features' },
+  { command: 'products', description: 'Browse products & templates' },
 ];
 
 export async function registerCommands(tg: TgClient, env: Env): Promise<{ username: string }> {
   const me = await tg.getMe();
   const username: string = me?.username || '';
 
-  // Default scope (applies everywhere a chat menu shows): only public commands.
+  // Default scope (everywhere a chat menu shows): public commands only.
   await tg.setCommands(PUBLIC_COMMANDS);
 
   // Per-admin private scope: adds /admin — nobody else ever sees it.

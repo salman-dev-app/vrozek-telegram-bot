@@ -14,6 +14,7 @@ import { displayName, esc } from '../lib/telegram';
 import { mainMenuRows, adminMenuRows, toKeyboard } from './commands';
 import { broadcastDrafts } from './messages';
 import { runBroadcast } from '../services/broadcast';
+import { getAllCatalog } from '../services/catalog';
 import { logEvent } from '../lib/log';
 
 const ADMIN_CBS = [
@@ -209,9 +210,9 @@ export async function routeCallback(tg: TgClient, env: Env, update: TgUpdate): P
       const p = await env.DB.prepare('SELECT COUNT(*) AS n FROM products WHERE active = 1').first<{ n: number }>();
       const k = await env.DB.prepare('SELECT COUNT(*) AS n FROM knowledge').first<{ n: number }>();
       const m = await env.DB.prepare('SELECT COUNT(*) AS n FROM moderation_logs').first<{ n: number }>();
-      const so = await env.DB.prepare('SELECT COUNT(*) AS n FROM site_orders').first<{ n: number }>();
+      const tpl = await getAllCatalog().length;
       await edit(
-        `📊 <b>Analytics</b>\n\n👤 Users: <b>${u?.n || 0}</b>\n👥 Groups: <b>${g?.n || 0}</b>\n📦 Active products: <b>${p?.n || 0}</b>\n🧠 Knowledge entries: <b>${k?.n || 0}</b>\n🛡️ Moderation actions: <b>${m?.n || 0}</b>\n🛍️ Store orders: <b>${so?.n || 0}</b>\n\nFull analytics on the Web Dashboard.`,
+        `📊 <b>Analytics</b>\n\n👤 Users: <b>${u?.n || 0}</b>\n👥 Groups: <b>${g?.n || 0}</b>\n📦 Catalog items: <b>${tpl}</b>\n🧠 Knowledge entries: <b>${k?.n || 0}</b>\n🛡️ Moderation actions: <b>${m?.n || 0}</b>\n\nFull analytics on the Web Dashboard.`,
         adminMenuRows
       );
       break;

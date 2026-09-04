@@ -1,0 +1,27 @@
+{
+  "_note": "VROZEK catalog — single source of products. Edit this file and redeploy. Fields per product: name, category, keywords (for matching), description (short), url (EXACT product page on your website). The bot ONLY ever shares these urls — no buying inside the bot.",
+  "website": "https://vrozek.xyz",
+  "products": [
+    {
+      "name": "E-Commerce Starter Template",
+      "category": "Templates",
+      "keywords": ["ecommerce", "shop", "woocommerce", "store", "landing", "template"],
+      "description": "Ready-to-use storefront template for online shops.",
+      "url": "https://vrozek.xyz/templates/ecommerce-starter"
+    },
+    {
+      "name": "Portfolio Template",
+      "category": "Templates",
+      "keywords": ["portfolio", "personal", "resume", "cv", "template"],
+      "description": "Clean personal portfolio and resume template.",
+      "url": "https://vrozek.xyz/templates/portfolio"
+    },
+    {
+      "name": "Business Website Template",
+      "category": "Templates",
+      "keywords": ["business", "company", "corporate", "website", "template"],
+      "description": "Professional business website template.",
+      "url": "https://vrozek.xyz/templates/business"
+    }
+  ]
+}

@@ -95,14 +95,14 @@ export async function helpPrivate(tg: TgClient, env: Env, msg: TgMessage): Promi
   if (role) {
     lines.push('', '⚙️ <b>Admin Panel</b> — manage the system (admins only).');
   }
-  lines.push('', 'Commands: /start  /help');
+  lines.push('', 'Commands: /start /help /products');
   await tg.sendMessage(msg.chat.id, lines.join('\n'), { reply_markup: toKeyboard(mainMenuRows(!!role)) });
 }
 
 export async function helpGroup(tg: TgClient, env: Env, msg: TgMessage): Promise<void> {
   await tg.sendMessage(
     msg.chat.id,
-    `🤖 <b>VROZEK AI</b> — group assistant\n\nYou can:\n• Mention me (@vrozek_ai_bot) or reply to me\n• Ask questions in any language\n• Ask about products\n\nCommands: /start  /help`,
+    `🤖 <b>VROZEK AI</b> — group assistant\n\nYou can:\n• Mention me (@vrozek_ai_bot) or reply to me\n• Ask questions in any language\n• Ask about products\n\nCommands: /start /help /products`,
     { reply_to_message_id: msg.message_id }
   );
 }

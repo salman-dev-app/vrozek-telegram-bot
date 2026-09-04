@@ -1,6 +1,6 @@
 /**
- * VROZEK AI — database layer (D1 on Cloudflare Workers)
- * Typed environment bindings + tiny settings helpers.
+ * VROZEK AI — environment bindings + settings helpers (D1).
+ * No secrets here — everything sensitive comes from Worker secrets.
  */
 
 export interface Env {
@@ -13,7 +13,6 @@ export interface Env {
   DASHBOARD_PASSWORD?: string;
   WEBHOOK_SECRET?: string;
   WEBSITE_URL?: string;
-  ORDER_WEBHOOK_SECRET?: string;
 }
 
 export interface SettingRow {

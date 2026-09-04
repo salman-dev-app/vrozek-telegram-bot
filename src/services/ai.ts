@@ -6,6 +6,8 @@
 import type { Env } from '../db/db';
 import { getSetting } from '../db/db';
 import type { TgMessage } from '../lib/telegram';
+import { findCatalogProducts, getWebsiteUrl } from './catalog';
+import type { CatalogProduct } from './catalog';
 
 /* ------------------------------------------------- language detection */
 
@@ -42,16 +44,7 @@ function scoreFields(queryTokens: string[], fields: string[]): number {
   return queryTokens.length ? hits / queryTokens.length : 0;
 }
 
-export interface Product {
-  id: number;
-  name: string;
-  description: string;
-  category: string;
-  link: string;
-  image_url: string;
-  price: string;
-  active: number;
-}
+export type Product = CatalogProduct;
 
 export interface KnowledgeItem {
   id: number;
@@ -60,16 +53,8 @@ export interface KnowledgeItem {
   category: string;
 }
 
-export async function findProducts(env: Env, text: string, limit = 3): Promise<Product[]> {
-  const q = tokens(text);
-  if (!q.length) return [];
-  const rows = await env.DB.prepare('SELECT * FROM products WHERE active = 1').all<Product>();
-  return rows.results
-    .map((p) => ({ p, s: scoreFields(q, [p.name, p.category, p.description]) }))
-    .filter((r) => r.s > 0)
-    .sort((a, b) => b.s - a.s)
-    .slice(0, limit)
-    .map((r) => r.p);
+export async function findProducts(_env: Env, text: string, limit = 3): Promise<CatalogProduct[]> {
+  return findCatalogProducts(text, limit);
 }
 
 export async function findKnowledge(env: Env, text: string, limit = 2): Promise<KnowledgeItem[]> {
@@ -90,12 +75,11 @@ export function isProductRequest(text: string): boolean {
   );
 }
 
-function productLine(p: Product): string {
+function productLine(p: CatalogProduct): string {
   const parts = [`- ${p.name}`];
-  if (p.price) parts.push(`Price: ${p.price}`);
   if (p.category) parts.push(`Category: ${p.category}`);
   if (p.description) parts.push(p.description);
-  if (p.link) parts.push(`Link: ${p.link}`);
+  parts.push(`🔗 ${p.url}`);
   return parts.join(' | ');
 }
 
@@ -145,6 +129,7 @@ export async function buildSystemPrompt(env: Env, group = false): Promise<string
     '- Never invent facts, prices, links, products or information. Use ONLY the VERIFIED DATA section when relevant.',
     '- If the user is unclear or the question is incomplete, ask a brief clarification question.',
     '- If nothing verified is relevant and you are unsure, answer honestly within your limits.',
+    '- You NEVER sell, take payments or collect orders in chat. You only share official product links from the VERIFIED DATA section.',
     group ? '- You are in a group chat: stay concise, never spam, only help when asked.' : '- This is a private chat.',
   ].join('\n');
   return custom || base;
@@ -164,6 +149,7 @@ export async function generateReply(env: Env, opts: AiReplyOptions): Promise<str
   const lang = detectLanguage(opts.text);
   const productHits = opts.includeProducts ? await findProducts(env, opts.text, 3) : [];
   const kbHits = await findKnowledge(env, opts.text, 2);
+  const storeUrl = await getWebsiteUrl(env);
 
   const verified: string[] = [];
   if (productHits.length) {
@@ -174,6 +160,9 @@ export async function generateReply(env: Env, opts: AiReplyOptions): Promise<str
       'KNOWLEDGE BASE (verified information from the administrator):',
       ...kbHits.map((k) => `Q: ${k.question}\nA: ${k.answer}`)
     );
+  }
+  if (opts.includeProducts && !productHits.length && isProductRequest(opts.text)) {
+    verified.push(`No exact catalog match. When asked for a product that does not exist in VERIFIED DATA, suggest browsing the store: ${storeUrl}`);
   }
 
   const ctx = [

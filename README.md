@@ -130,47 +130,29 @@ vrozek-ai/
 ## Market-grade features (v1.1)
 
 - 🌐 **Website store integration**: product links deep-link to your store (`WEBSITE_URL` or Dashboard → Settings → `website_url`)
-- 🛍️ **Order webhook** (`POST /webhook/order`, signed with `ORDER_WEBHOOK_SECRET`): your store pushes every new order → bot stores it and pings all admins (admin Telegram alerts; orders stored in `site_orders`)  — Dashboard stays lean, no order panel
 - 🧩 **Newcomer CAPTCHA** verification (per-group toggle)
 - ⚠️ **Warn/strike system** with auto-mute at the configured limit
 - 🛡 **Admin moderation commands**: /warn /mute /kick /ban /unmute /unban (system admins)
 - 🚨 **/report** — members flag messages, the team gets a private alert
 - 🧠 **Persistent anti-flood & anti-repeat** (D1 `mod_state` — survives worker restarts)
 - 🚫 Per-group **blocklist words**, link-post toggle, trusted-user list
-- Migration for existing installs: `migrations/002_market_features.sql` (+ `migrations/003_website_integration.sql` for the store webhook table)
 
-## 🌐 Website store integration (your shop lives on your website — not in the bot)
+## 🌐 Product catalog (single file you edit)
 
-The bot recommends products and deep-links them to your store; it does NOT hold a cart or take payments.
+The bot is a **link recommender only** — it never sells, never collects orders, __no cart, no payments, no order storage anywhere__. Every product it mentions comes from **one file you edit by hand**:
 
-**1. Set your store URL** — Dashboard → Settings → `website_url` (or `WEBSITE_URL` var in `wrangler.toml`).
+**`catalog/products.json`** — fields per product:
 
-**2. Order webhook** — your website calls this on every new order:
+| Field | Meaning |
+|---|---|
+| `name` | Product name shown to users |
+| `category` | e.g. Templates / Services |
+| `keywords` | words that trigger this product (match against user messages) |
+| `description` | one short line |
+| `url` | **exact product page on your website** — the only link the bot shares |
 
-```
-POST https://vrozek-ai.<account>.workers.dev/webhook/order
-Header: X-Order-Secret: <ORDER_WEBHOOK_SECRET>   (set via `wrangler secret put ORDER_WEBHOOK_SECRET`)
-Content-Type: application/json
+To add a product: add one object to `products` (keep valid JSON), then redeploy. That's it.
 
-{
-  "order_id": "ORD-1001",
-  "source": "woocommerce",
-  "customer": { "name": "Ali", "phone": "+8801xxxx", "telegram_id": 123456789 },
-  "items": [ { "name": "Product A", "price": "20", "qty": 2 } ],
-  "total": "40",
-  "currency": "USD",
-  "note": "Please call before delivery"
-}
-```
+When someone asks for a product or template, the bot replies with 1–3 matching entries as clickable **Open product** links. If nothing matches, it replies with a link to your main store page (`website_url` setting → `WEBSITE_URL` var → `https://vrozek.xyz`). Users click the link and find your product on your website.
 
-Response: `{ "ok": true, "received": true }`. The bot stores it in `site_orders` and alerts every admin in Telegram with the customer, items and total.
-
-**Test locally:**
-
-```bash
-curl -X POST https://vrozek-ai.<account>.workers.dev/webhook/order \
-  -H "Content-Type: application/json" -H "X-Order-Secret: <secret>" \
-  -d '{"order_id":"TEST-1","customer":{"name":"Ali"},"items":[{"name":"Demo","price":"5","qty":1}],"total":"5"}'
-```
-
-**3. (Optional) Referral / UTM tracking** — append `?utm_source=telegram&utm_medium=vrozek` to a product link so your store analytics shows bot-driven visits.
+Users can also run `/products` to browse the catalog.

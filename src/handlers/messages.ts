@@ -9,7 +9,8 @@ import type { Env } from '../db/db';
 import { getSetting } from '../db/db';
 import { getUserRole, isPrivateAccessApproved } from '../lib/auth';
 import { displayName, esc, type TgClient, type TgMessage } from '../lib/telegram';
-import { generateReply, findProducts, shouldRespondInGroup, type GateContext } from '../services/ai';
+import { generateReply, shouldRespondInGroup, type GateContext } from '../services/ai';
+import { findCatalogProducts, getWebsiteUrl } from '../services/catalog';
 import { analyzeMessage, logModeration, addWarn, resetWarns } from '../services/moderation';
 import { getSticker } from '../services/stickers';
 import { logEvent } from '../lib/log';
@@ -293,6 +294,28 @@ export async function routeMessage(tg: TgClient, env: Env, msg: TgMessage): Prom
       }
       return;
     }
+    if (cmd === '/products') {
+      const ok = isGroup
+        ? !!(await env.DB.prepare('SELECT enabled FROM groups WHERE id = ?1').bind(chat.id).first<{ enabled: number }>())
+        : await isPrivateAccessApproved(env, msg.from.id);
+      if (ok) {
+        const all = findCatalogProducts(text.length > 0 ? text : '', 12) || [];
+        const list = all.length ? all : [];
+        const body = list.length
+          ? list
+              .map(
+                (p) =>
+                  `• <b>${esc(p.name)}</b>${p.description ? `\n  ${esc(p.description)}` : ''}\n  🔗 <a href="${p.url}">Open product</a>`
+              )
+              .join('\n\n')
+          : 'No products yet. Ask me what you need, or browse the store.';
+        await tg.sendMessage(
+          chat.id,
+          `📦 <b>Products & Templates</b>\n\n${body}\n\nBrowse all: <a href="${await getWebsiteUrl(env)}">Store</a>`
+        );
+      }
+      return;
+    }
     if (cmd === '/admin') {
       if (isGroup) return;
       const role = await getUserRole(env, msg.from.id);
@@ -375,16 +398,26 @@ export async function routeMessage(tg: TgClient, env: Env, msg: TgMessage): Prom
   if (!shouldRespondInGroup(msg, ident)) return;
   if (!allowedToReply(chat.id, true)) return;
 
-  const products = /product|buy|price|কিন|দাম|order/i.test(text) ? await findProducts(env, text, 3) : [];
+  const productMatch = /product|buy|price|কিন|দাম|template|টেমপ্লেট/i.test(text);
+  const products = productMatch ? await findCatalogProducts(text, 3) : [];
   if (products.length) {
-    const lines = products.map((p, i) => {
-      let l = `${i + 1}. <b>${esc(p.name)}</b>`;
-      if (p.price) l += ` — ${esc(p.price)}`;
-      if (p.description) l += `\n   ${esc(p.description)}`;
-      if (p.link) l += `\n   🔗 ${p.link}`;
-      return l;
-    });
-    await tg.sendMessage(chat.id, `📦 Here's what I found:\n\n${lines.join('\n\n')}`, { reply_to_message_id: msg.message_id });
+    const lines = products.map(
+      (p) =>
+        `• <b>${esc(p.name)}</b>${p.description ? `\n  ${esc(p.description)}` : ''}\n  🔗 <a href="${p.url}">Open product</a>`
+    );
+    await tg.sendMessage(
+      chat.id,
+      `📦 Here's what I found:\n\n${lines.join('\n\n')}\n\nBrowse all: <a href="${await getWebsiteUrl(env)}">Store</a>`,
+      { reply_to_message_id: msg.message_id }
+    );
+    return;
+  }
+  if (productMatch) {
+    await tg.sendMessage(
+      chat.id,
+      `❌ I couldn't find a match for that.\nBrowse everything here: <a href="${await getWebsiteUrl(env)}">Open store</a>`,
+      { reply_to_message_id: msg.message_id }
+    );
     return;
   }
 
