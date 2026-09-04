@@ -1,5 +1,5 @@
 {
-  "_note": "VROZEK catalog — the bot only ever shares links from this file. Real store verified this session: vrozek.xyz = 'Codify Marketplace' (source code, scripts, templates, full-stack apps, dev services). The product grid is JavaScript-rendered, so the crawler this session returned only the page shell — NO individual products could be listed verbatim. Add each product after opening its page on the site; never invent names/prices. url MUST be the exact product page.",
+  "_note": "VROZEK catalog - the bot only ever shares links from this file. Official website: https://vrozek.xyz (verified live). Add each real product page here as it goes live: exact name, category, keywords, and the exact product URL. Never invent product names, prices or links.",
   "website": "https://vrozek.xyz",
   "store_sections": {
     "products": "https://vrozek.xyz/products",
