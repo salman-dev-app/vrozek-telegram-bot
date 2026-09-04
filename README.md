@@ -126,3 +126,14 @@ vrozek-ai/
 - ☑ Basic Auth dashboard, timing-safe password compare
 - ☑ Input validation on all dashboard POST endpoints
 - ☑ Minimal data collection: no private chat content stored except short memory + optional inbox
+
+## Market-grade features (v1.1)
+
+- 🛍️ In-bot **Shop**: browse products → cart → checkout → order alerts to admins (Dashboard → Orders)
+- 🧩 **Newcomer CAPTCHA** verification (per-group toggle)
+- ⚠️ **Warn/strike system** with auto-mute at the configured limit
+- 🛡 **Admin moderation commands**: /warn /mute /kick /ban /unmute /unban (system admins)
+- 🚨 **/report** — members flag messages, the team gets a private alert
+- 🧠 **Persistent anti-flood & anti-repeat** (D1 `mod_state` — survives worker restarts)
+- 🚫 Per-group **blocklist words**, link-post toggle, trusted-user list
+- Migration for existing installs: `migrations/002_market_features.sql`

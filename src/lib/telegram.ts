@@ -125,7 +125,7 @@ export class TgClient {
   }
 
   restrictChatMember(chatId: number | string, userId: number, seconds = 3600): Promise<any> {
-    const until = Math.floor(Date.now() / 1000) + seconds;
+    const until = seconds ? Math.floor(Date.now() / 1000) + seconds : Math.floor(Date.now() / 1000) + 3660 * 24 * 30;
     return this.call('restrictChatMember', {
       chat_id: chatId,
       user_id: userId,
@@ -135,6 +135,21 @@ export class TgClient {
         can_send_media_messages: false,
         can_send_other_messages: false,
         can_add_web_page_previews: false,
+      },
+    });
+  }
+
+  unrestrictChatMember(chatId: number | string, userId: number): Promise<any> {
+    return this.call('restrictChatMember', {
+      chat_id: chatId,
+      user_id: userId,
+      permissions: {
+        can_send_messages: true,
+        can_send_media_messages: true,
+        can_send_other_messages: true,
+        can_add_web_page_previews: true,
+        can_send_polls: true,
+        can_send_inline: true,
       },
     });
   }

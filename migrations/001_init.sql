@@ -1,5 +1,6 @@
 -- VROZEK AI — D1 schema (SQLite)
--- Apply:  npx wrangler d1 execute vrozek_ai --file=migrations/001_init.sql --remote
+-- Fresh install:  npx wrangler d1 execute vrozek_ai --file=migrations/001_init.sql --remote
+-- Existing installs only: run 002_market_features.sql too
 
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY,
@@ -32,7 +33,12 @@ CREATE TABLE IF NOT EXISTS group_settings (
   sticker_enabled INTEGER DEFAULT 1,
   products_enabled INTEGER DEFAULT 1,
   welcome_text TEXT DEFAULT '',
-  goodbye_text TEXT DEFAULT ''
+  goodbye_text TEXT DEFAULT '',
+  captcha_enabled INTEGER DEFAULT 0,
+  link_enabled INTEGER DEFAULT 1,
+  block_words TEXT DEFAULT '',
+  warn_limit INTEGER DEFAULT 3,
+  trusted TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS products (
@@ -110,7 +116,7 @@ CREATE TABLE IF NOT EXISTS inbox (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
--- Moderation state per (chat, user): last text + recent timestamps for flood/repeat detection
+-- Persistent anti-flood / anti-repeat state (survives worker restarts)
 CREATE TABLE IF NOT EXISTS mod_state (
   chat_id INTEGER NOT NULL,
   user_id INTEGER NOT NULL,
@@ -120,8 +126,46 @@ CREATE TABLE IF NOT EXISTS mod_state (
   PRIMARY KEY (chat_id, user_id)
 );
 
+-- Strike (warn) counter per group per user
+CREATE TABLE IF NOT EXISTS warns (
+  group_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  count INTEGER DEFAULT 1,
+  updated_at TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (group_id, user_id)
+);
+
+-- Newcomer CAPTCHA verification in progress
+CREATE TABLE IF NOT EXISTS captcha_state (
+  chat_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  message_id INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (chat_id, user_id)
+);
+
+-- Shopping cart
+CREATE TABLE IF NOT EXISTS cart (
+  user_id INTEGER NOT NULL,
+  product_id INTEGER NOT NULL,
+  qty INTEGER DEFAULT 1,
+  PRIMARY KEY (user_id, product_id)
+);
+
+-- Checked-out orders
+CREATE TABLE IF NOT EXISTS orders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER DEFAULT 0,
+  user_name TEXT DEFAULT '',
+  items_json TEXT DEFAULT '',
+  total TEXT DEFAULT '',
+  status TEXT DEFAULT 'new',
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_products_active ON products(active);
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
 CREATE INDEX IF NOT EXISTS idx_knowledge_cat ON knowledge(category);
 CREATE INDEX IF NOT EXISTS idx_modlogs_created ON moderation_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_logs_created ON logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at);

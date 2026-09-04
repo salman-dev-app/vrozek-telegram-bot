@@ -18,7 +18,11 @@ export function mainMenuRows(isAdmin: boolean): MenuRow[][] {
   const rows: MenuRow[][] = [
     [
       { text: '🤖 AI Assistant', callback_data: 'cb_ai' },
+      { text: '🛍️ Shop', callback_data: 'cb_shop' },
+    ],
+    [
       { text: '📦 Products', callback_data: 'cb_products' },
+      { text: '🛒 Cart', callback_data: 'cb_cart' },
     ],
     [
       { text: '👥 Groups', callback_data: 'cb_groups' },

@@ -1,15 +1,18 @@
 /**
  * VROZEK AI — inline button (callback) navigation.
  * Every admin callback re-verifies the role. No admin action without authorization.
+ * Includes: newcomer CAPTCHA verification, private shop (products → cart → order),
+ * and the full admin menu (groups, products, knowledge, moderation, stickers,
+ * broadcast, analytics, logs, settings).
  */
 
 import type { Env } from '../db/db';
 import { getSetting } from '../db/db';
 import { getUserRole } from '../lib/auth';
 import type { TgClient, TgUpdate } from '../lib/telegram';
-import { esc } from '../lib/telegram';
+import { displayName, esc } from '../lib/telegram';
 import { mainMenuRows, adminMenuRows, toKeyboard } from './commands';
-import { broadcastDrafts } from './messages';
+import { broadcastDrafts, notifyAdmins } from './messages';
 import { runBroadcast } from '../services/broadcast';
 import { logEvent } from '../lib/log';
 
@@ -38,6 +41,124 @@ export async function routeCallback(tg: TgClient, env: Env, update: TgUpdate): P
     });
   };
 
+  /* ------------------------------------------------ CAPTCHA ------------------------------------------------ */
+  if (data.startsWith('cb_captcha:')) {
+    const uid = Number(data.split(':')[1]);
+    if (uid !== user.id) {
+      await tg.answerCallback(cb.id, 'This button is for the new member only.');
+      return;
+    }
+    await env.DB.prepare('DELETE FROM captcha_state WHERE chat_id = ?1 AND user_id = ?2').bind(chat.id, user.id).run();
+    await tg.unrestrictChatMember(chat.id, user.id);
+    await tg.editMessageText(chat.id, message_id, `✅ <b>${esc(displayName(user))}</b> verified. Welcome!`);
+    await tg.answerCallback(cb.id, 'Verified ✓');
+    await logEvent(env, 'moderation', `Captcha passed: ${user.id} in ${chat.id}`);
+    return;
+  }
+
+  /* ------------------------------------------------ Shop: add to cart ------------------------------------------------ */
+  if (data.startsWith('cb_add:')) {
+    const pid = Number(data.split(':')[1]);
+    const p = await env.DB.prepare('SELECT id, name, price FROM products WHERE id = ?1 AND active = 1').bind(pid).first<{ id: number; name: string; price: string }>();
+    if (!p) {
+      await tg.answerCallback(cb.id, 'Product not available.');
+      return;
+    }
+    await env.DB.prepare(
+      'INSERT INTO cart (user_id, product_id, qty) VALUES (?1, ?2, 1) ON CONFLICT(user_id, product_id) DO UPDATE SET qty = qty + 1'
+    )
+      .bind(user.id, pid)
+      .run();
+    await tg.answerCallback(cb.id, `Added: ${p.name}`);
+    return;
+  }
+
+  /* ------------------------------------------------ Shop: view cart ------------------------------------------------ */
+  if (data === 'cb_cart') {
+    const rows = await env.DB.prepare(
+      `SELECT c.product_id, c.qty, p.name, p.price FROM cart c
+       JOIN products p ON p.id = c.product_id WHERE c.user_id = ?1`
+    )
+      .bind(user.id)
+      .all<{ product_id: number; qty: number; name: string; price: string }>();
+    if (!rows.results.length) {
+      await edit('🛒 <b>Your cart</b>\n\nYour cart is empty. Browse 📦 Products and add items.', mainMenuRows);
+      return;
+    }
+    const lines = rows.results.map(
+      (r, i) => `${i + 1}. <b>${esc(r.name)}</b> ×${r.qty}${r.price ? ` — ${esc(r.price)}` : ''}`
+    );
+    await edit(`🛒 <b>Your cart</b>\n\n${lines.join('\n')}\n\nPlace your order to send it to the team.`, (isAdmin) => [
+      [
+        { text: '✅ Place order', callback_data: 'cb_checkout' },
+        { text: '🗑 Clear', callback_data: 'cb_cart_clear' },
+      ],
+      [{ text: '📦 Products', callback_data: 'cb_shop' }],
+      ...mainMenuRows(isAdmin),
+    ]);
+    return;
+  }
+
+  if (data === 'cb_cart_clear') {
+    await env.DB.prepare('DELETE FROM cart WHERE user_id = ?1').bind(user.id).run();
+    await tg.answerCallback(cb.id, 'Cart cleared.');
+    await edit('🛒 <b>Your cart</b>\n\nCleared.', mainMenuRows);
+    return;
+  }
+
+  /* ------------------------------------------------ Shop: checkout ------------------------------------------------ */
+  if (data === 'cb_checkout') {
+    const rows = await env.DB.prepare(
+      `SELECT c.qty, p.name, p.price FROM cart c JOIN products p ON p.id = c.product_id WHERE c.user_id = ?1`
+    )
+      .bind(user.id)
+      .all<{ qty: number; name: string; price: string }>();
+    if (!rows.results.length) {
+      await tg.answerCallback(cb.id, 'Your cart is empty.');
+      return;
+    }
+    const items = rows.results.map((r) => `${r.name} ×${r.qty}${r.price ? ` (${r.price})` : ''}`).join('\n');
+    const totalNumeric = rows.results.reduce((sum, r) => {
+      const n = parseFloat(String(r.price).replace(/[^0-9.]/g, ''));
+      return sum + (isNaN(n) ? 0 : n * r.qty);
+    }, 0);
+    const total = totalNumeric > 0 ? String(totalNumeric) : '';
+    await env.DB.prepare('INSERT INTO orders (user_id, user_name, items_json, total, status) VALUES (?1, ?2, ?3, ?4, ?5)')
+      .bind(user.id, displayName(user), JSON.stringify(rows.results), total, 'new')
+      .run();
+    await env.DB.prepare('DELETE FROM cart WHERE user_id = ?1').bind(user.id).run();
+    await notifyAdmins(
+      env,
+      tg,
+      `🛍️ <b>New order</b>\nFrom: ${esc(displayName(user))} (<code>${user.id}</code>)\n\n${items}${total ? `\n\nTotal: ${total}` : ''}`
+    );
+    await tg.answerCallback(cb.id, 'Order placed ✓');
+    await edit(`✅ <b>Order placed!</b>\n\nThanks, ${esc(displayName(user))}. The team will contact you shortly.`, mainMenuRows);
+    await logEvent(env, 'order', `Order from ${user.id}: ${items.slice(0, 200)}`);
+    return;
+  }
+
+  /* ------------------------------------------------ Shop: browse ------------------------------------------------ */
+  if (data === 'cb_shop') {
+    const rows = await env.DB.prepare('SELECT id, name, price, link FROM products WHERE active = 1 ORDER BY id DESC LIMIT 15').all<{ id: number; name: string; price: string; link: string }>();
+    let text = '🛍️ <b>Shop</b>\n\n';
+    if (!rows.results.length) text += 'No products available yet.';
+    else
+      rows.results.forEach((p, i) => {
+        text += `${i + 1}. <b>${esc(p.name)}</b>`;
+        if (p.price) text += ` — ${esc(p.price)}`;
+        text += '\n';
+      });
+    const keyboard = (isAdmin: boolean) => [
+      ...(rows.results.map((p) => [{ text: `➕ Add: ${p.name.slice(0, 28)}`, callback_data: `cb_add:${p.id}` }]) as any),
+      [{ text: '🛒 View cart', callback_data: 'cb_cart' }],
+      ...mainMenuRows(isAdmin),
+    ];
+    await edit(text, keyboard as any);
+    return;
+  }
+
+  /* ------------------------------------------------ main menu ------------------------------------------------ */
   switch (data) {
     case 'cb_home': {
       await edit(
@@ -66,6 +187,7 @@ export async function routeCallback(tg: TgClient, env: Env, update: TgUpdate): P
           text += '\n';
         });
       }
+      text += '\nUse 🛍️ <b>Shop</b> to order directly.';
       await edit(text, mainMenuRows);
       break;
     }
@@ -79,7 +201,7 @@ export async function routeCallback(tg: TgClient, env: Env, update: TgUpdate): P
     }
     case 'cb_about': {
       await edit(
-        `ℹ️ <b>About</b>\n\n<b>VROZEK AI</b> is Salman's intelligent assistant system — a premium Telegram ecosystem built with AI, products, knowledge and smart moderation.\n\n🌐 Website: https://vrozek.xyz`,
+        `ℹ️ <b>About</b>\n\n<b>VROZEK AI</b> is Salman's intelligent assistant system — a premium Telegram ecosystem built with AI, products, knowledge, smart moderation and a shop.\n\n🌐 Website: https://vrozek.xyz`,
         mainMenuRows
       );
       break;
@@ -89,10 +211,13 @@ export async function routeCallback(tg: TgClient, env: Env, update: TgUpdate): P
         '❓ <b>Help</b>',
         '',
         '🤖 <b>AI Assistant</b> — chat in any language.',
+        '🛍️ <b>Shop</b> — browse products, add to cart, place an order.',
         '📦 <b>Products</b> — browse available products.',
         '👥 <b>Groups</b> — see authorized groups.',
         'ℹ️ <b>About</b> — about VROZEK AI.',
         '🌐 <b>Website</b> — vrozek.xyz',
+        '',
+        'In groups: mention me, /report a message, admins can /warn /mute /kick /ban.',
         '',
         'Commands: /start  /help',
       ];
@@ -101,7 +226,10 @@ export async function routeCallback(tg: TgClient, env: Env, update: TgUpdate): P
       break;
     }
     case 'cb_admin': {
-      await edit('⚙️ <b>Admin Panel</b>\nManage the VROZEK system.\n\nFull control is available on the Web Dashboard:\n<code>{worker-url}/dashboard</code>', adminMenuRows);
+      await edit(
+        '⚙️ <b>Admin Panel</b>\nManage the VROZEK system.\n\nFull control is available on the Web Dashboard:\n<code>{worker-url}/dashboard</code>',
+        adminMenuRows
+      );
       break;
     }
     case 'cb_admin_groups': {
@@ -134,13 +262,11 @@ export async function routeCallback(tg: TgClient, env: Env, update: TgUpdate): P
     }
     case 'cb_admin_moderation': {
       const rows = await env.DB.prepare('SELECT id, title FROM groups').all<{ id: number; title: string }>();
+      const warns = await env.DB.prepare('SELECT COUNT(*) AS n FROM warns').first<{ n: number }>();
       let text = '🛡️ <b>Moderation</b>\n\nConfigured per group:\n';
       if (!rows.results.length) text += '\nNo authorized groups yet.';
-      else
-        rows.results.forEach((g) => {
-          text += `\n• ${esc(g.title || `Group ${g.id}`)}`;
-        });
-      text += '\n\nFine-tune each group (AI / welcome / moderation toggles) in the Web Dashboard → Moderation.';
+      else rows.results.forEach((g) => (text += `\n• ${esc(g.title || `Group ${g.id}`)}`));
+      text += `\n\nActive strikes: <b>${warns?.n || 0}</b>\n\nFine-tune each group (AI / welcome / moderation / CAPTCHA / blocklist) in the Web Dashboard → Groups.`;
       await edit(text, adminMenuRows);
       break;
     }
@@ -154,10 +280,7 @@ export async function routeCallback(tg: TgClient, env: Env, update: TgUpdate): P
     }
     case 'cb_admin_broadcast': {
       broadcastDrafts.set(user.id, { stage: 'await_broadcast_text' });
-      await edit(
-        `📢 <b>Broadcast</b>\n\nSend me the message you want to broadcast.\n(You will confirm before it is sent to all authorized groups.)`,
-        adminMenuRows
-      );
+      await edit(`📢 <b>Broadcast</b>\n\nSend me the message you want to broadcast.\n(You will confirm before it is sent to all authorized groups.)`, adminMenuRows);
       break;
     }
     case 'cb_bc_cancel': {
@@ -186,8 +309,9 @@ export async function routeCallback(tg: TgClient, env: Env, update: TgUpdate): P
       const p = await env.DB.prepare('SELECT COUNT(*) AS n FROM products WHERE active = 1').first<{ n: number }>();
       const k = await env.DB.prepare('SELECT COUNT(*) AS n FROM knowledge').first<{ n: number }>();
       const m = await env.DB.prepare('SELECT COUNT(*) AS n FROM moderation_logs').first<{ n: number }>();
+      const o = await env.DB.prepare('SELECT COUNT(*) AS n FROM orders').first<{ n: number }>();
       await edit(
-        `📊 <b>Analytics</b>\n\n👤 Users: <b>${u?.n || 0}</b>\n👥 Groups: <b>${g?.n || 0}</b>\n📦 Active products: <b>${p?.n || 0}</b>\n🧠 Knowledge entries: <b>${k?.n || 0}</b>\n🛡️ Moderation actions: <b>${m?.n || 0}</b>\n\nFull analytics on the Web Dashboard.`,
+        `📊 <b>Analytics</b>\n\n👤 Users: <b>${u?.n || 0}</b>\n👥 Groups: <b>${g?.n || 0}</b>\n📦 Active products: <b>${p?.n || 0}</b>\n🧠 Knowledge entries: <b>${k?.n || 0}</b>\n🛡️ Moderation actions: <b>${m?.n || 0}</b>\n🛍️ Orders: <b>${o?.n || 0}</b>\n\nFull analytics on the Web Dashboard.`,
         adminMenuRows
       );
       break;
