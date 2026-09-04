@@ -1,0 +1,23 @@
+# VROZEK AI — Cloudflare Workers configuration
+# 1) Create the D1 database:   npx wrangler d1 create vrozek_ai
+# 2) Paste the printed database_id below.
+# 3) Apply the schema:         npx wrangler d1 execute vrozek_ai --file=migrations/001_init.sql --remote
+# 4) Secrets go to `wrangler secret put` — never paste tokens here.
+
+name = "vrozek-ai"
+main = "src/index.ts"
+compatibility_date = "2026-09-04"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "vrozek_ai"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+# Non-secret defaults only. Secrets (bot token, API keys, dashboard password)
+# must be set with:  npx wrangler secret put <NAME>
+[vars]
+# GEMINI_MODEL = "gemini-3.5-flash"
+
+# Daily housekeeping at 03:00 UTC (prunes old logs) — optional; remove to disable
+[triggers]
+crons = ["0 3 * * *"]
