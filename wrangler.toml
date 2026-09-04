@@ -11,7 +11,7 @@ compatibility_date = "2026-09-04"
 [[d1_databases]]
 binding = "DB"
 database_name = "vrozek_ai"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "92a2dd29-70c6-4ece-b483-8d9bff6936b2"
 
 # Non-secret defaults only. Secrets (bot token, API keys, dashboard password)
 # must be set with:  npx wrangler secret put <NAME>
