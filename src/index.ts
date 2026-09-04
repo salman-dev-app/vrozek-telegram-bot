@@ -21,8 +21,33 @@ app.get('/', (c) =>
     service: 'VROZEK AI',
     owner: 'Salman',
     website: 'https://vrozek.xyz',
+    version: '1.2.0',
     ok: true,
   })
+);
+
+/** Health check — also verifies the D1 database is reachable. */
+app.get('/health', async (c) => {
+  let db = 'ok';
+  try {
+    await c.env.DB.prepare('SELECT 1 AS x').first();
+  } catch {
+    db = 'error';
+  }
+  return c.json({ ok: db === 'ok', service: 'VROZEK AI', version: '1.2.0', db, time: new Date().toISOString() });
+});
+
+/** Light SEO: robots + sitemap pointing at the brand site. */
+app.get('/robots.txt', (c) => c.text('User-agent: *\nAllow: /\n'));
+app.get('/sitemap.xml', (c) =>
+  c.text(
+    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' +
+      '<url><loc>https://vrozek.xyz/</loc><changefreq>weekly</changefreq></url>' +
+      '</urlset>',
+    200,
+    { 'Content-Type': 'application/xml' }
+  )
 );
 
 /**
@@ -76,6 +101,12 @@ app.post('/setup', async (c) => {
 const dash = createDashboard();
 app.route('/dashboard', dash);
 app.route('/api', dash);
+
+app.notFound((c) => c.json({ ok: false, error: 'not found' }, 404));
+app.onError((e, c) => {
+  c.executionCtx.waitUntil(logEvent(c.env, 'error', String(e)).catch(() => {}));
+  return c.json({ ok: false, error: 'internal error' }, 500);
+});
 
 /**
  * Cron trigger (see [triggers] in wrangler.toml): light housekeeping.

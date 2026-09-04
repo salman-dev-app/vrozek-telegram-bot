@@ -12,8 +12,9 @@ import { getUserRole } from '../lib/auth';
 import type { TgClient, TgUpdate } from '../lib/telegram';
 import { displayName, esc } from '../lib/telegram';
 import { mainMenuRows, adminMenuRows, toKeyboard } from './commands';
-import { broadcastDrafts } from './messages';
+import { broadcastDrafts, groupLang } from './messages';
 import { runBroadcast } from '../services/broadcast';
+import { t } from '../lib/i18n';
 import { getAllCatalog } from '../services/catalog';
 import { logEvent } from '../lib/log';
 
@@ -53,7 +54,7 @@ export async function routeCallback(tg: TgClient, env: Env, update: TgUpdate): P
     }
     await env.DB.prepare('DELETE FROM captcha_state WHERE chat_id = ?1 AND user_id = ?2').bind(chat.id, user.id).run();
     await tg.unrestrictChatMember(chat.id, user.id);
-    await tg.editMessageText(chat.id, message_id, `✅ <b>${esc(displayName(user))}</b> verified. Welcome!`);
+    await tg.editMessageText(chat.id, message_id, t(await groupLang(env, chat.id), 'verified', { name: esc(displayName(user)) }));
     await tg.answerCallback(cb.id, 'Verified ✓');
     await logEvent(env, 'moderation', `Captcha passed: ${user.id} in ${chat.id}`);
     return;

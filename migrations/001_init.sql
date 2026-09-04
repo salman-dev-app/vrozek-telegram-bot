@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS group_settings (
   moderation_enabled INTEGER DEFAULT 1,
   sticker_enabled INTEGER DEFAULT 1,
   products_enabled INTEGER DEFAULT 1,
+  lang TEXT DEFAULT 'en',
   welcome_text TEXT DEFAULT '',
   goodbye_text TEXT DEFAULT '',
   captcha_enabled INTEGER DEFAULT 0,

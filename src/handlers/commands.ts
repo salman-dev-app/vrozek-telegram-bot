@@ -5,6 +5,8 @@
 import type { Env } from '../db/db';
 import { getUserRole } from '../lib/auth';
 import { displayName, esc, type TgClient, type TgMessage } from '../lib/telegram';
+import { t } from '../lib/i18n';
+import { detectLanguage } from '../services/ai';
 
 const SEP = '━━━━━━━━━━━━━━━━━━';
 
@@ -108,5 +110,5 @@ export async function helpGroup(tg: TgClient, env: Env, msg: TgMessage): Promise
 }
 
 export async function accessDenied(tg: TgClient, env: Env, msg: TgMessage): Promise<void> {
-  await tg.sendMessage(msg.chat.id, '🔒 This bot is privately managed. Please contact the administrator for access.');
+  await tg.sendMessage(msg.chat.id, t(detectLanguage(msg.text || ''), 'access_denied'));
 }

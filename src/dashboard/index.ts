@@ -11,6 +11,8 @@ import { getSetting, setSetting } from '../db/db';
 import { getUserRole } from '../lib/auth';
 import { runBroadcast } from '../services/broadcast';
 import { logEvent } from '../lib/log';
+import { getAllCatalog } from '../services/catalog';
+import { rateLimit } from '../lib/limiter';
 import { TgClient } from '../lib/telegram';
 
 export function createDashboard(): Hono<{ Bindings: Env }> {
@@ -24,6 +26,13 @@ export function createDashboard(): Hono<{ Bindings: Env }> {
     }
     const auth = basicAuth({ username: user, password: pass });
     return auth(c, next);
+  });
+
+  app.use('/api/*', async (c, next) => {
+    if (c.req.method === 'GET') return next();
+    const ip = c.req.header('cf-connecting-ip') || 'unknown';
+    if (!rateLimit(`api:${ip}`, 30, 60000)) return c.json({ error: 'rate limited, slow down' }, 429);
+    return next();
   });
 
   app.get('/', (c) =>
@@ -148,25 +157,21 @@ window.setTexts=async(id)=>{try{await api('/api/groups/'+id+'/settings',{method:
 
 ROUTES.products=async(v)=>{
   const p=await api('/api/products');
-  v.innerHTML=\`<div class="card"><h2>Products</h2><p class="sub">The AI only recommends products from this database — it never invents any.</p>
-  <form class="row" onsubmit="addProduct(event)">
-    <input id="pname" placeholder="Name" required style="max-width:180px"/>
-    <input id="pcat" placeholder="Category" style="max-width:130px"/>
-    <input id="pprice" placeholder="Price" style="max-width:110px"/>
-    <input id="plink" placeholder="Link" style="max-width:200px"/>
-    <button class="btn">+ Add</button>
-  </form>
-  <textarea id="pdesc" placeholder="Description" class="pad"></textarea></div>
-  <div class="card"><table><tr><th>Name</th><th>Category</th><th>Price</th><th>Status</th><th></th></tr>
-  \${p.map(x=>\`<tr><td><b>\${esc(x.name)}</b><br><small>\${esc(x.description||'')}</small></td><td>\${esc(x.category||'')}</td><td>\${esc(x.price||'')}</td>
-  <td><span class="badge \${x.active?'on':'off'}">\${x.active?'active':'inactive'}</span></td>
-  <td><button class="btn ghost" onclick="toggleProduct(\${x.id})">\${x.active?'Deactivate':'Activate'}</button>
-  <button class="btn danger" onclick="delProduct(\${x.id})">Del</button></td></tr>\`).join('')}</table></div>\`;
+  window.__prods=p;
+  v.innerHTML=`<div class="card"><h2>Product Catalog</h2><p class="sub">Single source: <b>catalog/products.json</b> (repo root). Edit it, then redeploy. The bot only recommends these links.</p>
+  <div class="row"><input id="pq" placeholder="Search products…" style="max-width:230px" oninput="renderProds()"/>
+  <select id="pc" style="max-width:190px" onchange="renderProds()"><option value="">All categories</option>${[...new Set(p.map(x=>x.category).filter(Boolean))].map(cat=>`<option>${esc(cat)}</option>`).join('')}</select>
+  <span style="color:var(--mut);font-size:12.5px">${p.length} items</span></div></div>
+  <div class="card" id="plist"></div>`;
+  renderProds();
 };
-window.addProduct=async(e)=>{e.preventDefault();try{await api('/api/products',{method:'POST',body:JSON.stringify({name:$('#pname').value,category:$('#pcat').value,price:$('#pprice').value,link:$('#plink').value,description:$('#pdesc').value})});toast('Added');show('products');}catch(err){toast(err.message);}};
-window.delProduct=async(id)=>{try{await api('/api/products/'+id,{method:'DELETE'});toast('Deleted');show('products');}catch(err){toast(err.message);}};
-window.toggleProduct=async(id)=>{try{await api('/api/products/'+id+'/toggle',{method:'POST'});show('products');}catch(err){toast(err.message);}};
-
+window.renderProds=()=>{
+  const q=($('#pq').value||'').toLowerCase();
+  const c=$('#pc').value||'';
+  const list=(window.__prods||[]).filter(x=>(!q||(x.name+' '+x.description+' '+x.category).toLowerCase().includes(q))&&(!c||x.category===c));
+  $('#plist').innerHTML=`<table><tr><th>Name</th><th>Category</th><th>Description</th><th>Link</th></tr>`+
+    (list.map(x=>`<tr><td><b>${esc(x.name)}</b></td><td>${esc(x.category||'')}</td><td>${esc(x.description||'')}</td><td><a href="${esc(x.url)}" target="_blank">open</a></td></tr>`).join('')||'<tr><td colspan=4>No products in catalog.</td></tr>')+`</table>`;
+};
 ROUTES.knowledge=async(v)=>{
   const k=await api('/api/knowledge');
   v.innerHTML=\`<div class="card"><h2>Knowledge Base</h2><p class="sub">Verified Q&amp;A the AI can use when relevant.</p>
@@ -316,7 +321,7 @@ navRender();show('dashboard');
   app.post('/api/groups/:id/settings', async (c) => {
     const id = Number(c.req.param('id'));
     const b: Record<string, unknown> = await c.req.json();
-    const allowed = ['ai_enabled', 'welcome_enabled', 'goodbye_enabled', 'moderation_enabled', 'sticker_enabled', 'products_enabled', 'welcome_text', 'goodbye_text'];
+    const allowed = ['ai_enabled', 'welcome_enabled', 'goodbye_enabled', 'moderation_enabled', 'sticker_enabled', 'products_enabled', 'lang', 'welcome_text', 'goodbye_text'];
     const sets: string[] = [];
     const vals: unknown[] = [];
     for (const k of Object.keys(b)) {
@@ -340,32 +345,10 @@ navRender();show('dashboard');
   });
 
   app.get('/api/products', async (c) => {
-    const rows = await c.env.DB.prepare('SELECT * FROM products ORDER BY id DESC').all();
-    return c.json(rows.results);
+    // Catalog is file-driven (catalog/products.json); dashboard shows it read-only.
+    return c.json(getAllCatalog().map((p, i) => ({ id: i + 1, name: p.name, category: p.category, description: p.description, url: p.url, keywords: p.keywords, active: 1 })));
   });
-  app.post('/api/products', async (c) => {
-    const b = await c.req.json();
-    if (!b.name) return c.json({ error: 'name required' }, 400);
-    await c.env.DB.prepare(
-      'INSERT INTO products (name, description, category, link, image_url, price, created_by) VALUES (?1,?2,?3,?4,?5,?6,0)'
-    ).bind(String(b.name), String(b.description || ''), String(b.category || ''), String(b.link || ''), String(b.image_url || ''), String(b.price || '')).run();
-    await logEvent(c.env, 'product', `Product "${String(b.name).slice(0, 60)}" added via dashboard`);
-    return c.json({ ok: true });
-  });
-  app.post('/api/products/:id/toggle', async (c) => {
-    const id = Number(c.req.param('id'));
-    const p = await c.env.DB.prepare('SELECT active FROM products WHERE id = ?1').bind(id).first<{ active: number }>();
-    await c.env.DB.prepare('UPDATE products SET active = ?1 WHERE id = ?2').bind(p?.active ? 0 : 1, id).run();
-    return c.json({ ok: true });
-  });
-  app.delete('/api/products/:id', async (c) => {
-    const id = Number(c.req.param('id'));
-    await c.env.DB.prepare('DELETE FROM products WHERE id = ?1').bind(id).run();
-    await logEvent(c.env, 'product', `Product ${id} deleted via dashboard`);
-    return c.json({ ok: true });
-  });
-
-  app.get('/api/knowledge', async (c) => {
+app.get('/api/knowledge', async (c) => {
     const rows = await c.env.DB.prepare('SELECT * FROM knowledge ORDER BY id DESC').all();
     return c.json(rows.results);
   });

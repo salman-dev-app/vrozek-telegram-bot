@@ -14,6 +14,7 @@ import { findCatalogProducts, getWebsiteUrl } from '../services/catalog';
 import { analyzeMessage, logModeration, addWarn, resetWarns } from '../services/moderation';
 import { getSticker } from '../services/stickers';
 import { logEvent } from '../lib/log';
+import { t } from '../lib/i18n';
 import { startPrivate, startGroup, helpPrivate, helpGroup, accessDenied, toKeyboard, mainMenuRows } from './commands';
 
 /* per-worker in-memory state (AI reply cooldown, broadcast drafts) */
@@ -33,6 +34,15 @@ async function getBotIdentity(tg: TgClient): Promise<GateContext> {
   botIdentity = { botId: me?.id || 0, botUsername: me?.username || '' };
   return botIdentity;
 }
+
+async function groupLang(env: Env, groupId: number): Promise<string> {
+  const r = await env.DB.prepare('SELECT lang FROM group_settings WHERE group_id = ?1')
+    .bind(groupId)
+    .first<{ lang: string }>();
+  return r?.lang || 'en';
+}
+
+export { groupLang };
 
 function allowedToReply(chatId: number, isGroup: boolean): boolean {
   const now = Date.now();
@@ -89,7 +99,7 @@ export async function routeMessage(tg: TgClient, env: Env, msg: TgMessage): Prom
     if (group?.enabled) {
       const gs = await env.DB.prepare('SELECT * FROM group_settings WHERE group_id = ?1').bind(chat.id).first<{
         welcome_enabled: number; goodbye_enabled: number; welcome_text: string; goodbye_text: string;
-        captcha_enabled: number;
+        captcha_enabled: number; lang: string;
       }>();
       const ident = await getBotIdentity(tg);
 
@@ -98,21 +108,23 @@ export async function routeMessage(tg: TgClient, env: Env, msg: TgMessage): Prom
           if (joined.is_bot && joined.id === ident.botId) continue;
           if (gs?.welcome_enabled !== 0) {
             const name = esc(displayName(joined));
+            const glang = gs?.lang || 'en';
             const text = gs?.welcome_text
               ? gs.welcome_text.replace('{name}', name)
-              : `Welcome, ${name}! 👋 We're happy to have you here.`;
+              : t(glang, 'welcome_default', { name });
             await tg.sendMessage(chat.id, text);
           }
           // Newcomer verification: restrict until they tap the button.
           if (gs?.captcha_enabled === 1 && !joined.is_bot) {
             try {
               await tg.restrictChatMember(chat.id, joined.id, 0);
+              const glang = gs?.lang || 'en';
               const cm = await tg.sendMessage(
                 chat.id,
-                `🧩 <b>${esc(displayName(joined))}</b>, please verify you're human:`,
+                t(glang, 'captcha_title', { name: esc(displayName(joined)) }),
                 {
                   reply_markup: {
-                    inline_keyboard: [[{ text: '✅ I am human', callback_data: `cb_captcha:${joined.id}` }]],
+                    inline_keyboard: [[{ text: t(glang, 'captcha_btn'), callback_data: `cb_captcha:${joined.id}` }]],
                   },
                 }
               );
@@ -150,11 +162,11 @@ export async function routeMessage(tg: TgClient, env: Env, msg: TgMessage): Prom
     const groupRow = await env.DB.prepare('SELECT enabled FROM groups WHERE id = ?1').bind(chat.id).first<{ enabled: number }>();
     if (groupRow?.enabled && text) {
       const gs = await env.DB.prepare(
-        'SELECT moderation_enabled, link_enabled, block_words, trusted, warn_limit FROM group_settings WHERE group_id = ?1'
+        'SELECT moderation_enabled, link_enabled, block_words, trusted, warn_limit, lang FROM group_settings WHERE group_id = ?1'
       )
         .bind(chat.id)
         .first<{
-          moderation_enabled: number; link_enabled: number; block_words: string; trusted: string; warn_limit: number;
+          moderation_enabled: number; link_enabled: number; block_words: string; trusted: string; warn_limit: number; lang: string;
         }>();
       if (gs && gs.moderation_enabled !== 0) {
         const isAdmin = !!(await getUserRole(env, msg.from.id));
@@ -172,7 +184,7 @@ export async function routeMessage(tg: TgClient, env: Env, msg: TgMessage): Prom
           });
           if (res.action === 'mute') {
             await tg.restrictChatMember(chat.id, msg.from.id, 3600);
-            await tg.sendMessage(chat.id, `🔇 <b>${esc(displayName(msg.from))}</b> muted for flooding.`);
+            await tg.sendMessage(chat.id, t(gs?.lang || 'en', 'muted_flood', { name: displayName(msg.from) }));
           } else {
             // escálate: strikes accumulate; at the limit the user is muted and strikes reset.
             const limit = Number(gs.warn_limit) >= 1 ? Number(gs.warn_limit) : 3;
@@ -181,15 +193,9 @@ export async function routeMessage(tg: TgClient, env: Env, msg: TgMessage): Prom
               if (strikes >= limit) {
                 await tg.restrictChatMember(chat.id, msg.from.id, 3600);
                 await resetWarns(env, chat.id, msg.from.id);
-                await tg.sendMessage(
-                  chat.id,
-                  `⚠️ <b>${esc(displayName(msg.from))}</b> reached ${limit} strikes — muted for 1 hour.`
-                );
+                await tg.sendMessage(chat.id, t(gs?.lang || 'en', 'strikes_reached', { name: displayName(msg.from), n: limit }));
               } else {
-                await tg.sendMessage(
-                  chat.id,
-                  `⚠️ Removed a message (${res.category}). ${esc(displayName(msg.from))} — strike ${strikes}/${limit}.`
-                );
+                await tg.sendMessage(chat.id, t(gs?.lang || 'en', 'strike_deleted', { cat: res.category, name: displayName(msg.from), s: strikes, limit }));
               }
             } else {
               await tg.sendMessage(chat.id, `⚠️ Removed a message (${res.category}).`);
@@ -270,7 +276,7 @@ export async function routeMessage(tg: TgClient, env: Env, msg: TgMessage): Prom
         tg,
         `🚨 <b>Report</b>\nGroup: ${esc(chat.title || '')}\nReported by: ${esc(displayName(msg.from))}\nTarget: ${esc(displayName(target.from))}\nMessage: ${txt}`
       );
-      await tg.sendMessage(chat.id, '📨 Thanks — the report was sent to the team.');
+      await tg.sendMessage(chat.id, t(await groupLang(env, chat.id), 'report_confirm'));
       return;
     }
 
