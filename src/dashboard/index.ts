@@ -157,21 +157,25 @@ window.setTexts=async(id)=>{try{await api('/api/groups/'+id+'/settings',{method:
 
 ROUTES.products=async(v)=>{
   const p=await api('/api/products');
-  window.__prods=p;
-  v.innerHTML=`<div class="card"><h2>Product Catalog</h2><p class="sub">Single source: <b>catalog/products.json</b> (repo root). Edit it, then redeploy. The bot only recommends these links.</p>
-  <div class="row"><input id="pq" placeholder="Search products…" style="max-width:230px" oninput="renderProds()"/>
-  <select id="pc" style="max-width:190px" onchange="renderProds()"><option value="">All categories</option>${[...new Set(p.map(x=>x.category).filter(Boolean))].map(cat=>`<option>${esc(cat)}</option>`).join('')}</select>
-  <span style="color:var(--mut);font-size:12.5px">${p.length} items</span></div></div>
-  <div class="card" id="plist"></div>`;
-  renderProds();
+  v.innerHTML=\`<div class="card"><h2>Products</h2><p class="sub">The AI only recommends products from this database — it never invents any.</p>
+  <form class="row" onsubmit="addProduct(event)">
+    <input id="pname" placeholder="Name" required style="max-width:180px"/>
+    <input id="pcat" placeholder="Category" style="max-width:130px"/>
+    <input id="pprice" placeholder="Price" style="max-width:110px"/>
+    <input id="plink" placeholder="Link" style="max-width:200px"/>
+    <button class="btn">+ Add</button>
+  </form>
+  <textarea id="pdesc" placeholder="Description" class="pad"></textarea></div>
+  <div class="card"><table><tr><th>Name</th><th>Category</th><th>Price</th><th>Status</th><th></th></tr>
+  \${p.map(x=>\`<tr><td><b>\${esc(x.name)}</b><br><small>\${esc(x.description||'')}</small></td><td>\${esc(x.category||'')}</td><td>\${esc(x.price||'')}</td>
+  <td><span class="badge \${x.active?'on':'off'}">\${x.active?'active':'inactive'}</span></td>
+  <td><button class="btn ghost" onclick="toggleProduct(\${x.id})">\${x.active?'Deactivate':'Activate'}</button>
+  <button class="btn danger" onclick="delProduct(\${x.id})">Del</button></td></tr>\`).join('')}</table></div>\`;
 };
-window.renderProds=()=>{
-  const q=($('#pq').value||'').toLowerCase();
-  const c=$('#pc').value||'';
-  const list=(window.__prods||[]).filter(x=>(!q||(x.name+' '+x.description+' '+x.category).toLowerCase().includes(q))&&(!c||x.category===c));
-  $('#plist').innerHTML=`<table><tr><th>Name</th><th>Category</th><th>Description</th><th>Link</th></tr>`+
-    (list.map(x=>`<tr><td><b>${esc(x.name)}</b></td><td>${esc(x.category||'')}</td><td>${esc(x.description||'')}</td><td><a href="${esc(x.url)}" target="_blank">open</a></td></tr>`).join('')||'<tr><td colspan=4>No products in catalog.</td></tr>')+`</table>`;
-};
+window.addProduct=async(e)=>{e.preventDefault();try{await api('/api/products',{method:'POST',body:JSON.stringify({name:$('#pname').value,category:$('#pcat').value,price:$('#pprice').value,link:$('#plink').value,description:$('#pdesc').value})});toast('Added');show('products');}catch(err){toast(err.message);}};
+window.delProduct=async(id)=>{try{await api('/api/products/'+id,{method:'DELETE'});toast('Deleted');show('products');}catch(err){toast(err.message);}};
+window.toggleProduct=async(id)=>{try{await api('/api/products/'+id+'/toggle',{method:'POST'});show('products');}catch(err){toast(err.message);}};
+
 ROUTES.knowledge=async(v)=>{
   const k=await api('/api/knowledge');
   v.innerHTML=\`<div class="card"><h2>Knowledge Base</h2><p class="sub">Verified Q&amp;A the AI can use when relevant.</p>
